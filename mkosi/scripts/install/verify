@@ -7,7 +7,7 @@ stage_verify_install() {
 
   findmnt /mnt/dgx-lite-new >/dev/null || mount -o nouuid "$OS_PART" /mnt/dgx-lite-new
   [[ -x /mnt/dgx-lite-new/usr/sbin/finit ]] || die "target has no finit"
-  [[ -e /mnt/dgx-lite-new/sbin/init ]] || die "target has no /sbin/init"
+  [[ "$(readlink -f /mnt/dgx-lite-new/sbin/init)" == *finit* ]] || die "target /sbin/init is not finit"
   [[ -f /mnt/dgx-lite-new/etc/fstab ]] || die "target has no fstab"
   grep -q '^UUID=' /mnt/dgx-lite-new/etc/fstab || die "fstab missing UUID entries"
   [[ -f /mnt/dgx-lite-esp/EFI/dgx-os-lite/grubaa64.efi ]] || die "EFI loader not installed"

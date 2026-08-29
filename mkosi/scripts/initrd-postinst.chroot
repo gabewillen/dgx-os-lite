@@ -1,0 +1,100 @@
+#!/bin/bash
+# PID 1 in the initrd is busybox sh /init — never systemd.
+set -e
+ln -sf /bin/busybox /bin/sh
+busybox --install -s /bin 2>/dev/null || true
+
+cat > /init <<'EOF'
+#!/bin/sh
+set -e
+export PATH=/sbin:/bin:/usr/sbin:/usr/bin
+
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev 2>/dev/null || mount -t tmpfs tmpfs /dev
+mkdir -p /dev/pts /dev/shm /run
+mount -t devpts devpts /dev/pts 2>/dev/null || true
+
+# Load storage modules if present (depmod in the image).
+if [ -d /lib/modules ]; then
+  kver=$(uname -r)
+  [ -f /lib/modules/$kver/modules.dep ] || depmod "$kver" 2>/dev/null || true
+  for m in virtio_pci virtio_blk virtio_scsi nvme nvme_core xfs ext4 overlay sd_mod ahci vfat; do
+    modprobe "$m" 2>/dev/null || true
+  done
+fi
+
+# Give virtio/nvme a moment to appear.
+i=0
+while [ $i -lt 50 ]; do
+  [ -e /sys/class/block ] && break
+  i=$((i + 1))
+  sleep 0.1
+done
+
+root=
+init=/sbin/init
+for tok in $(cat /proc/cmdline); do
+  case "$tok" in
+    root=*) root=${tok#root=} ;;
+    init=*) init=${tok#init=} ;;
+  esac
+done
+
+if [ -z "$root" ]; then
+  echo "initrd: no root= on cmdline" >&2
+  exec /bin/sh
+fi
+
+mkdir -p /newroot
+tries=0
+while [ $tries -lt 50 ]; do
+  if mount -o ro "$root" /newroot 2>/dev/null; then
+    break
+  fi
+  # PARTUUID=...
+  case "$root" in
+    PARTUUID=*)
+      pu=${root#PARTUUID=}
+      dev=$(blkid -t PARTUUID="$pu" -o device 2>/dev/null || true)
+      if [ -n "$dev" ] && mount -o ro "$dev" /newroot 2>/dev/null; then
+        break
+      fi
+      ;;
+    UUID=*)
+      uu=${root#UUID=}
+      dev=$(blkid -t UUID="$uu" -o device 2>/dev/null || true)
+      if [ -n "$dev" ] && mount -o ro "$dev" /newroot 2>/dev/null; then
+        break
+      fi
+      ;;
+  esac
+  tries=$((tries + 1))
+  sleep 0.2
+done
+
+if ! mountpoint -q /newroot; then
+  echo "initrd: failed to mount $root" >&2
+  blkid || true
+  exec /bin/sh
+fi
+
+mount -o remount,rw /newroot 2>/dev/null || true
+
+if [ ! -x "/newroot$init" ] && [ ! -e "/newroot$init" ]; then
+  if [ -x /newroot/usr/sbin/finit ]; then
+    init=/usr/sbin/finit
+  fi
+fi
+
+# Prefer finit if present even when /sbin/init still points at systemd.
+if [ -x /newroot/usr/sbin/finit ]; then
+  init=/usr/sbin/finit
+fi
+
+umount /proc 2>/dev/null || true
+umount /sys 2>/dev/null || true
+exec switch_root /newroot "$init"
+EOF
+chmod 755 /init
+echo "busybox initrd /init written" >&2

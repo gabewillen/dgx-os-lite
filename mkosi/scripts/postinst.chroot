@@ -10,9 +10,15 @@ printf 'vm.swappiness=0\n' > /etc/sysctl.d/90-dgx-lite.conf
 echo 'blacklist r8169' > /etc/modprobe.d/blacklist-r8169.conf
 printf 'nameserver 1.1.1.1\n' > /etc/resolv.conf
 
+# finit requires /etc/fstab (no systemd generators). Labels from mkosi.repart.
+cat > /etc/fstab <<'EOF'
+LABEL=root  /     xfs  defaults,noatime  0  1
+LABEL=ESP   /boot vfat umask=0077        0  2
+EOF
+
 mkdir -p /etc/default/grub.d
 cat > /etc/default/grub.d/lite.cfg <<EOF
-GRUB_CMDLINE_LINUX_DEFAULT="quiet console=ttyAMA0,115200 module_blacklist=r8169 crashkernel=0"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet console=ttyAMA0,115200 module_blacklist=r8169 crashkernel=0 init=/usr/sbin/finit"
 GRUB_TERMINAL="serial console"
 GRUB_SERIAL_COMMAND="serial --unit=0 --speed=115200"
 EOF
@@ -41,7 +47,7 @@ EOF
 mkdir -p /etc/finit.d /etc/finit.d/available
 
 cat > /etc/finit.conf <<'EOF'
-# dgx-os-lite — finit bootstrap
+# dgx-os-lite — finit bootstrap (no systemd)
 runlevel 2
 run [S] sysctl --system -- Apply sysctl
 run [S] /usr/bin/ssh-keygen -A -- SSH host keys
@@ -49,8 +55,16 @@ tty [12345] /dev/ttyAMA0 vt100 noclear nowait
 tty [12345] /dev/tty1 linux noclear nowait
 EOF
 
+# udevd is /lib/systemd/systemd-udevd from the udev package (not PID 1).
+cat > /etc/finit.d/available/udevd.conf <<'EOF'
+service [S12345] /lib/systemd/systemd-udevd -- udevd
+run [S] udevadm trigger --type=subsystems --action=add -- udev subsystems
+run [S] udevadm trigger --type=devices --action=add -- udev devices
+run [S] udevadm settle --timeout=30 -- udev settle
+EOF
+
 cat > /etc/finit.d/available/networking.conf <<'EOF'
-run [S] <service/udevd/ready> /sbin/ifup -a -- ifup
+run [S] /sbin/ifup -a -- ifup
 EOF
 
 cat > /etc/finit.d/available/sshd.conf <<'EOF'
@@ -63,12 +77,16 @@ service [2345] <net/lo/up> /usr/sbin/mdnsd -sn -- mDNS
 EOF
 
 cat > /etc/finit.d/available/nvidia-persistenced.conf <<'EOF'
-service nowarn [2345] <service/udevd/ready> /usr/bin/nvidia-persistenced --persistence-mode -- NVIDIA persistenced
+service nowarn [2345] /usr/bin/nvidia-persistenced --persistence-mode -- NVIDIA persistenced
 EOF
 
+ln -sfn /etc/finit.d/available/udevd.conf /etc/finit.d/udevd.conf
 ln -sfn /etc/finit.d/available/networking.conf /etc/finit.d/networking.conf
 ln -sfn /etc/finit.d/available/sshd.conf /etc/finit.d/sshd.conf
 ln -sfn /etc/finit.d/available/mdnsd.conf /etc/finit.d/mdnsd.conf
 ln -sfn /etc/finit.d/available/nvidia-persistenced.conf /etc/finit.d/nvidia-persistenced.conf
 
-echo "dgx-spark-lite postinst complete (finit + ifupdown)" >&2
+ln -sfn /usr/sbin/finit /sbin/init
+ln -sfn /usr/sbin/finit /usr/sbin/init
+
+echo "dgx-spark-lite postinst complete (finit + ifupdown, no systemd PID 1)" >&2

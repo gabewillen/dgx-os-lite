@@ -1,0 +1,33 @@
+#!/bin/bash
+# mkosi's default initrd and firstboot can leave systemd as /sbin/init.
+# After every other hook: finit is PID 1; systemd daemon is gone.
+set -e
+
+if [ ! -x /usr/sbin/finit ]; then
+  echo "finalize: /usr/sbin/finit missing" >&2
+  exit 1
+fi
+
+# finit-sysv should own these; rewrite anyway.
+ln -sfn /usr/sbin/finit /sbin/init
+ln -sfn /usr/sbin/finit /usr/sbin/init
+ln -sfn /usr/sbin/finit /sbin/telinit 2>/dev/null || true
+ln -sfn /usr/sbin/halt /sbin/reboot 2>/dev/null || true
+
+# Drop the systemd PID 1 binary if a package pulled it in.
+if [ -e /usr/lib/systemd/systemd ]; then
+  rm -f /usr/lib/systemd/systemd
+fi
+# networkd / journald / logind leftovers
+rm -f /usr/lib/systemd/systemd-networkd \
+      /usr/lib/systemd/systemd-journald \
+      /usr/lib/systemd/systemd-logind \
+      /usr/lib/systemd/systemd-resolved \
+      /usr/lib/systemd/systemd-timesyncd \
+      /usr/lib/systemd/systemd-userdbd \
+      /usr/lib/systemd/systemd-homed \
+      /usr/lib/systemd/systemd-networkd-wait-online \
+      /lib/systemd/systemd
+
+# Keep udevd (from udev) and standalone sysusers/tmpfiles.
+echo "finalize: PID 1 is finit ($(readlink -f /sbin/init))" >&2

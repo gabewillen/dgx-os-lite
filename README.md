@@ -18,8 +18,7 @@ unified memory for the GPU.
 - sshd out of the box: `ssh root@gx10-5e36.local` (mDNS; hostname is `{sku}-{4-hex}` from DMI)
 - DHCP on ethernet, WiFi (iwlwifi/rtw/mt79), and ConnectX (`mlx5_core` + `rdma-core`/`libibverbs`/`ibverbs-providers` for NCCL/RoCE)
 - Serial console on ttyAMA0 (debug)
-- Volatile journald (8 MiB RAM cap), swappiness off, heavy services masked
-- Headless: no desktop stack, no X11/GL
+- Headless: no desktop stack, no X11/GL. PID 1 is finit; initrd is busybox.
 
 ## Build it
 
@@ -86,13 +85,13 @@ Every service is on trial. Default state:
 
 | running | why |
 |---|---|
-| finit (PID 1) | finit-sysv; udev + systemd-standalone-sysusers (no systemd daemon) |
+| finit (PID 1) | finit-sysv; udev + standalone sysusers/tmpfiles (no systemd daemon) |
 | ifupdown + /etc/network/interfaces | DHCP on eth/enp/mlx |
 | sshd + mdnsd | remote access + `{sku}-{4hex}.local` |
-| systemd-udevd | device management |
+| systemd-udevd | device management (udev package, not PID 1) |
 
-No systemd as PID 1 (finit-sysv). No journald, networkd, resolved, userdbd,
-homed. Result target: **well under 512 MiB RSS** before inference
+No systemd as PID 1. No journald, networkd, resolved, userdbd, homed.
+Result target: **well under 512 MiB RSS** before inference
 (see `docs/memory-accounting.md`).
 
 
