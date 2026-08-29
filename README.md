@@ -1,5 +1,11 @@
 # dgx-spark-lite
 
+> **Status: WIP / alpha** — VM-verified end-to-end (Debian arm64, XFS root,
+> NVIDIA driver chain, ssh+mDNS at first boot). Not yet validated on real
+> DGX Spark hardware. Expect breaking changes to the image layout until 1.0.
+
+
+
 Minimal, out-of-the-box Debian Linux image for the **NVIDIA DGX Spark** (GB10,
 Grace Blackwell, arm64). Designed as a clean base for inference workloads:
 all drivers included, OS services and RAM floor minimized to leave maximum
