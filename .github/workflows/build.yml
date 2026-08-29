@@ -29,12 +29,13 @@ jobs:
       - name: Build image
         run: |
           cd mkosi
-          sudo mkosi build -f --output-dir ../output
+          sudo mkosi build -f --output-dir ../output --output dgx-spark-lite.raw
+
 
       - name: Verify output
         run: |
           ls -lh output/
-          file output/*.raw || true
+          file output/*.raw
 
       - name: Upload image artifact
         uses: actions/upload-artifact@v4
