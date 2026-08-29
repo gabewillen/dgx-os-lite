@@ -1,5 +1,6 @@
 #!/bin/bash
-# PID 1 is finit (finit-sysv). systemd remains only as udev's dependency.
+# PID 1 is finit (finit-sysv). udev from the udev package; sysusers/tmpfiles
+# from systemd-standalone-* so we never install the systemd daemon.
 set -e
 export DEBIAN_FRONTEND=noninteractive
 

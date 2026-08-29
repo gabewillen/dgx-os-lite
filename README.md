@@ -86,7 +86,7 @@ Every service is on trial. Default state:
 
 | running | why |
 |---|---|
-| finit (PID 1) | Debian finit-sysv; udev kept from systemd package |
+| finit (PID 1) | finit-sysv; udev + systemd-standalone-sysusers (no systemd daemon) |
 | dhcpcd + wpa_supplicant | connectivity |
 | sshd + mdnsd | remote access + `{sku}-{4hex}.local` |
 | systemd-udevd | device management |
