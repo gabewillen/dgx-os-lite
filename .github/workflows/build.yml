@@ -19,8 +19,8 @@ jobs:
 
       - name: Install mkosi
         run: |
-          # ukify is required by mkosi to assemble the bootable UKI;
-          sudo apt-get install -y mkosi qemu-user-static sbsigntool systemd-ukify
+          # bootctl identifies kernel type during mkosi's cross-arch build.
+          sudo apt-get install -y mkosi qemu-user-static sbsigntool systemd-ukify systemd-boot-tools
 
       - name: Build image
         run: |
