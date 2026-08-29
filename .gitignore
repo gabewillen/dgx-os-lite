@@ -1,0 +1,18 @@
+output/
+*.raw
+*.raw.xz
+mkosi/mkosi.cache/
+mkosi/.mkosi-private/
+build/out/
+*.img
+*.log
+mkosi/image
+mkosi/image.initrd
+mkosi/image.vmlinuz
+mkosi/mkosi.extra/root/.ssh/authorized_keys
+
+# local-only: lab tooling, legacy scripts, scratch results
+/build/
+/results/
+/tools/
+/docs/pve-build-test.md

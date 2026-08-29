@@ -1,0 +1,50 @@
+name: Build dgx-spark-lite image
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    # native arm64 runner: no binfmt emulation, builds in ~10 min
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mkosi
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mkosi qemu-user-static
+
+      - name: Build image
+        run: |
+          cd mkosi
+          sudo mkosi build -f --output-dir ../output
+
+      - name: Verify output
+        run: |
+          ls -lh output/
+          file output/*.raw || true
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dgx-spark-lite-image
+          path: output/*.raw
+          retention-days: 14
+          compression-level: 0
+
+      - name: Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: output/*.raw
+          body: |
+            Flash to USB: `xz -d dgx-spark-lite.raw.xz && sudo dd if=dgx-spark-lite.raw of=/dev/sdX bs=4M oflag=direct status=progress`
+            Boot the DGX Spark from USB (UEFI), then `ssh dgx@dgx-spark.local`

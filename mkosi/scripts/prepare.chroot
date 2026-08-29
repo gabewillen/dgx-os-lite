@@ -1,0 +1,22 @@
+#!/bin/bash
+# Prepare script (.chroot suffix => mkosi runs this INSIDE the image rootfs,
+# where apt-get/dpkg are the image's own). Installs the NVIDIA driver chain
+# from NVIDIA's debian13/sbsa CUDA repo — Debian ships no nvidia-open for
+# GB10/Blackwell.
+set -ex
+export DEBIAN_FRONTEND=noninteractive
+
+# CUDA repo keyring (sbsa/arm64 for GB10)
+curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/debian13/sbsa/cuda-keyring_1.1-1_all.deb -o /tmp/cuda-keyring.deb
+dpkg -i /tmp/cuda-keyring.deb
+rm -f /tmp/cuda-keyring.deb
+apt-get update
+
+# Driver + userspace for GB10 (Blackwell). --no-install-recommends keeps out
+# the X11/GL desktop stack: this image is headless, built for inference.
+apt-get install -y --no-install-recommends \
+    nvidia-open \
+    nvidia-persistenced \
+    nvidia-modprobe
+
+echo "nvidia prepare complete" >&2

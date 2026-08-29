@@ -1,0 +1,87 @@
+#!/bin/bash
+# Runs INSIDE the arm64 chroot (binfmt) after packages are installed.
+# Goal: maximum free unified RAM — every default here exists to keep OS
+# services and memory floor low while remaining out-of-the-box usable.
+set -e
+
+# Network: DHCP on ethernet, wlan, ConnectX (mlx5 multinode)
+mkdir -p /etc/systemd/network
+cat > /etc/systemd/network/20-wired.network <<EOF
+[Match]
+Name=en* eth* mlx*
+
+[Network]
+DHCP=yes
+EOF
+cat > /etc/systemd/network/25-wlan.network <<EOF
+[Match]
+Name=wl*
+
+[Network]
+DHCP=yes
+IgnoreCarrierLoss=3s
+EOF
+
+sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
+# no systemd-resolved: networkd handles DNS via /run/systemd/netif state;
+# save ~10-15 MiB. DHCP-provided DNS written to /etc/resolv.conf via
+# resolvconf-style symlink below.
+rm -f /etc/resolv.conf
+ln -s /run/systemd/resolve/resolv.conf /etc/resolv.conf 2>/dev/null || true
+
+# Volatile journald: logs in RAM, capped — no disk writes, tiny footprint
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/lite.conf <<EOF
+[Journal]
+Storage=volatile
+RuntimeMaxUse=8M
+EOF
+
+# Mask heavy default services (network telemetry, session mgmt, etc.)
+for svc in systemd-resolved.service systemd-journal-remote systemd-journal-upload \
+           systemd-userdbd systemd-homed systemd-portabled systemd-networkd-wait-online \
+           ModemManager udisks2 polkit accounts-daemon cups avahi-dnsconfd \
+           NetworkManager wpa_supplicant unattended-upgrades apt-daily \
+           apt-daily-upgrade e2scrub_all fstrim; do
+  systemctl mask "$svc" 2>/dev/null || true
+done
+# wpa_supplicant masked above but referenced by networkd for wlan; re-enable
+# only the supplicant, in background mode:
+systemctl unmask wpa_supplicant.service 2>/dev/null || true
+systemctl enable wpa_supplicant.service 2>/dev/null || true
+systemctl unmask systemd-networkd-wait-online.service 2>/dev/null || true
+systemctl mask systemd-networkd-wait-online.service 2>/dev/null || true
+
+# swappiness off: NVIDIA unified memory behaves better with it off
+printf 'vm.swappiness=0\n' > /etc/sysctl.d/90-dgx-lite.conf
+echo 'blacklist r8169' > /etc/modprobe.d/blacklist-r8169.conf
+
+# Serial console first (debug), tty0 second
+mkdir -p /etc/default/grub.d
+cat > /etc/default/grub.d/lite.cfg <<EOF
+GRUB_CMDLINE_LINUX_DEFAULT="quiet console=ttyAMA0,115200 module_blacklist=r8169 crashkernel=0"
+GRUB_TERMINAL="serial console"
+GRUB_SERIAL_COMMAND="serial --unit=0 --speed=115200"
+EOF
+
+# mDNS hostname: ssh dgx@dgx-spark.local out of the box
+echo "dgx-spark" > /etc/hostname
+
+# First boot: ssh host keys generated here (never bake keys into image)
+mkdir -p /etc/systemd/system
+cat > /etc/systemd/system/ssh-keygen-firstboot.service <<EOF
+[Unit]
+Description=Generate SSH host keys on first boot
+Before=ssh.service
+ConditionPathExists=!/etc/ssh/ssh_host_ed25519_key
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/ssh-keygen -A
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable ssh-keygen-firstboot.service 2>/dev/null || true
+
+echo "dgx-spark-lite postinst complete" >&2
