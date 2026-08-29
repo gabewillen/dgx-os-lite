@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# UEFI mode + Secure Boot off. Never run fwupd / never write firmware.
+
+stage_validate_efi() {
+  msg "stage: validate EFI boot environment"
+  [[ -d /sys/firmware/efi ]] || die "not booted in UEFI mode"
+  [[ -d /sys/firmware/efi/efivars ]] || die "efivars not mounted"
+
+  if command -v mokutil >/dev/null; then
+    if mokutil --sb-state 2>/dev/null | grep -qi 'enabled'; then
+      die "Secure Boot is enabled. Disable it in UEFI (Security → Secure Boot) before installing a custom OS."
+    fi
+    msg "Secure Boot: disabled"
+  else
+    msg "mokutil absent; cannot query Secure Boot (continuing)"
+  fi
+}

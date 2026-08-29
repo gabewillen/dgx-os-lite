@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Target: nvme — USB boots → Spark → EFI check → keep ESP → replace OS →
+# hostname → EFI entry → verify → BootNext → reboot.
+
+# shellcheck source=install/verify-spark
+source "$INSTALL_DIR/verify-spark"
+# shellcheck source=install/validate-efi
+source "$INSTALL_DIR/validate-efi"
+# shellcheck source=install/plan
+source "$INSTALL_DIR/plan"
+# shellcheck source=install/replace-os
+source "$INSTALL_DIR/replace-os"
+# shellcheck source=install/hostname
+source "$INSTALL_DIR/hostname"
+# shellcheck source=install/efi-entry
+source "$INSTALL_DIR/efi-entry"
+# shellcheck source=install/verify
+source "$INSTALL_DIR/verify"
+# shellcheck source=install/bootnext
+source "$INSTALL_DIR/bootnext"
+
+run_nvme() {
+  [[ $EUID -eq 0 ]] || die "run as root"
+  if [[ -f "$MARKER" && "$FORCE" != 1 ]]; then
+    msg "already installed ($MARKER exists); set DGX_LITE_FORCE=1 to re-run"
+    exit 0
+  fi
+  require_bin blkid
+  require_bin blockdev
+  require_bin dd
+  require_bin efibootmgr
+  require_bin mount
+  require_bin findmnt
+
+  trap cleanup EXIT
+
+  stage_verify_spark
+  stage_validate_efi
+  stage_plan
+  HOSTNAME_NEW=$(factory_hostname)
+  msg "hostname: $HOSTNAME_NEW"
+  if [[ "$DRY_RUN" == 1 ]]; then
+    msg "DRY-RUN complete — no disks written"
+    exit 0
+  fi
+  stage_replace_os
+  rewrite_fstab
+  apply_hostname "$HOSTNAME_NEW"
+  stage_efi_entry
+  stage_verify_install
+  stage_bootnext
+  stage_reboot
+}

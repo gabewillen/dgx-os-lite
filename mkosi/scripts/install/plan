@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Classify GPT: keep ESP, replace largest Linux OS partition.
+
+stage_plan() {
+  msg "stage: classify partitions (preserve ESP only)"
+  DISK=$(find_internal_disk)
+  msg "internal disk: $DISK"
+  [[ -b "$DISK" ]] || die "$DISK is not a block device"
+
+  local src
+  src=$(findmnt -n -o SOURCE / 2>/dev/null || true)
+  if [[ "$src" == "$DISK"* ]]; then
+    die "root filesystem is on $DISK — installer is not running from USB"
+  fi
+
+  ESP_PART=""
+  OS_PART=""
+  local p size best=0
+  for p in "$DISK"p[0-9]* "$DISK"[1-9]*; do
+    [[ -b "$p" ]] || continue
+    [[ "$p" == "$DISK" ]] && continue
+    if is_esp "$p"; then
+      ESP_PART="$p"
+      msg "  ESP      $p  PARTLABEL=$(lsblk -no PARTLABEL "$p" 2>/dev/null || echo ?) TYPE=$(blkid -o value -s TYPE "$p" 2>/dev/null || echo ?)"
+    elif is_os_candidate "$p"; then
+      size=$(blockdev --getsize64 "$p")
+      msg "  LINUX    $p  ${size}B  PARTLABEL=$(lsblk -no PARTLABEL "$p" 2>/dev/null || echo ?) TYPE=$(blkid -o value -s TYPE "$p" 2>/dev/null || echo ?)"
+      if (( size > best )); then
+        best=$size
+        OS_PART="$p"
+      fi
+    elif is_protected "$p"; then
+      msg "  KEEP     $p  (MSR)"
+    else
+      msg "  SKIP     $p  PARTLABEL=$(lsblk -no PARTLABEL "$p" 2>/dev/null || echo ?) TYPE=$(blkid -o value -s TYPE "$p" 2>/dev/null || echo ?)"
+    fi
+  done
+
+  [[ -n "$ESP_PART" ]] || die "no EFI system partition on $DISK — refusing (would require creating one)"
+  [[ -n "$OS_PART" ]] || die "no Linux OS partition to replace on $DISK"
+  msg "  REPLACE  $OS_PART (largest Linux partition)"
+
+  local os_bytes payload_bytes
+  os_bytes=$(blockdev --getsize64 "$OS_PART")
+  payload_bytes=$(stat -c %s "$PAYLOAD")
+  (( os_bytes >= payload_bytes )) || die "OS partition $OS_PART is ${os_bytes}B < payload ${payload_bytes}B"
+
+  msg "plan: keep ESP=$ESP_PART replace=$OS_PART"
+}

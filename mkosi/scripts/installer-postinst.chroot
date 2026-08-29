@@ -1,0 +1,46 @@
+#!/bin/bash
+# USB installer image postinst: autostart the NVMe installer after networkd.
+set -e
+export DEBIAN_FRONTEND=noninteractive
+
+mkdir -p /etc/systemd/network
+cat > /etc/systemd/network/20-wired.network <<EOF
+[Match]
+Name=en* eth* mlx*
+[Network]
+DHCP=yes
+EOF
+
+sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
+
+mkdir -p /etc/systemd/system
+cat > /etc/systemd/system/dgx-os-lite-install.service <<'EOF'
+[Unit]
+Description=Install DGX-OS-Lite onto internal NVMe
+After=local-fs.target sys-firmware-efi.mount
+Wants=local-fs.target
+ConditionPathExists=/opt/dgx-os-lite/rootfs.img
+ConditionPathExists=!/var/lib/dgx-os-lite/installed
+ConditionKernelCommandLine=!dgx.lite.install=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/install.sh nvme
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStartSec=2h
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable dgx-os-lite-install.service
+
+mkdir -p /etc/systemd/system/serial-getty@ttyAMA0.service.d
+cat > /etc/systemd/system/serial-getty@ttyAMA0.service.d/autologin.conf <<'EOF'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty -o '-p -- \\u' --autologin root --keep-baud 115200,38400,9600 ttyAMA0 vt220
+EOF
+
+echo "dgx-os-lite-installer" > /etc/hostname
+echo "installer postinst complete" >&2

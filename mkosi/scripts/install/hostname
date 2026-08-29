@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Factory-style hostname: {sku}-{last 4 of serial}, e.g. gx10-5e36.
+
+factory_hostname() {
+  local name serial suffix prefix
+  name=$(dmi product_name | tr '[:upper:]' '[:lower:]')
+  case "$name" in
+    *gx10*) prefix=gx10 ;;
+    *) prefix=spark ;;
+  esac
+  serial=$(dmi product_serial)
+  serial=${serial//-/}
+  serial=$(printf '%s' "$serial" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9')
+  if [[ ${#serial} -ge 4 ]]; then
+    suffix=${serial: -4}
+  else
+    suffix=$(dmi product_uuid | tr '[:upper:]' '[:lower:]' | tr -cd 'a-f0-9')
+    suffix=${suffix: -4}
+  fi
+  [[ -n "$suffix" ]] || suffix=0000
+  printf '%s-%s\n' "$prefix" "$suffix"
+}
+
+apply_hostname() {
+  local hn="$1"
+  msg "hostname: $hn  mDNS: ${hn}.local"
+  if [[ "$DRY_RUN" == 1 ]]; then
+    return 0
+  fi
+  mkdir -p /mnt/dgx-lite-new/etc \
+           /mnt/dgx-lite-new/etc/systemd/system/mdnsd.service.d
+  printf '%s\n' "$hn" > /mnt/dgx-lite-new/etc/hostname
+  cat > /mnt/dgx-lite-new/etc/hosts <<EOF
+127.0.0.1 localhost
+127.0.1.1 $hn
+::1 localhost ip6-localhost ip6-loopback
+EOF
+  cat > /mnt/dgx-lite-new/etc/systemd/system/mdnsd.service.d/override.conf <<EOF
+[Unit]
+After=systemd-networkd.service
+Wants=systemd-networkd.service
+Requires=
+
+[Service]
+ExecStart=
+ExecStart=/usr/sbin/mdnsd -sn -H $hn
+EOF
+}

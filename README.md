@@ -15,8 +15,8 @@ unified memory for the GPU.
 
 - Debian 13 (trixie) rootfs, **XFS** root filesystem
 - NVIDIA driver stack (nvidia-open for Blackwell, GSP firmware, persistence mode)
-- sshd out of the box: `ssh dgx@dgx-spark.local` (mDNS discovery — no IP hunt)
-- DHCP on ethernet, WiFi (iwlwifi/rtw/mt79), and ConnectX (`mlx5_core`) for multinode
+- sshd out of the box: `ssh root@gx10-5e36.local` (mDNS; hostname is `{sku}-{4-hex}` from DMI)
+- DHCP on ethernet, WiFi (iwlwifi/rtw/mt79), and ConnectX (`mlx5_core` + `rdma-core`/`libibverbs`/`ibverbs-providers` for NCCL/RoCE)
 - Serial console on ttyAMA0 (debug)
 - Volatile journald (8 MiB RAM cap), swappiness off, heavy services masked
 - Headless: no desktop stack, no X11/GL
@@ -37,19 +37,38 @@ Output: `output/dgx-spark-lite.raw` (~1.5-2 GB GPT disk image, ESP + XFS root).
 CI does this on every push to `main` and attaches the image as an artifact;
 tagged releases (`v*`) publish it to GitHub Releases.
 
-## Flash and boot
+## Install onto a Spark (preserve ESP)
+
+Do **not** `dd` the OS image over the internal NVMe. Build the USB
+installer instead. It does **not** update firmware (do that from DGX OS
+with `fwupd` first). Official NVIDIA recovery USB already wipes and
+rebuilds the SSD, so this installer does not try to preserve NVIDIA OS
+or recovery partitions.
 
 ```bash
-xz -d dgx-spark-lite.raw.xz
-sudo dd if=dgx-spark-lite.raw of=/dev/sdX bs=4M oflag=direct status=progress
+cd mkosi
+sudo bash build-usb-installer.sh ../output/dgx-os-lite-installer.raw
+sudo dd if=../output/dgx-os-lite-installer.raw of=/dev/sdX bs=4M oflag=direct status=progress
 ```
 
-Boot the DGX Spark from USB (UEFI). First boot takes ~1 min (ssh key
-generation, rootfs expansion). Then:
+On the Spark (firmware already updated from DGX OS, Secure Boot off):
 
-```bash
-ssh root@dgx-spark.local
-```
+1. Boot the USB (UEFI Boot Override).
+2. `dgx-os-lite-install.service` runs automatically and:
+   - verifies DMI is DGX Spark / GB10 (or ASUS GX10)
+   - checks UEFI mode + Secure Boot off (no fwupd)
+   - **keeps** the EFI System Partition (adds files, does not wipe it)
+   - **replaces** the first Linux OS partition with the lite rootfs
+   - copies `\EFI\dgx-os-lite\grubaa64.efi` without deleting NVIDIA boot files
+   - creates EFI boot entry **DGX-OS-Lite**, sets `BootNext`, reboots
+
+Disable auto-install: kernel cmdline `dgx.lite.install=0`. Dry-run:
+`DGX_LITE_DRY_RUN=1`. Force re-run: `DGX_LITE_FORCE=1`.
+
+The raw OS image (`dgx-spark-lite.raw`) remains a VM/dev artifact, not
+the Spark install path.
+
+
 
 ## Access (out of the box)
 
@@ -58,7 +77,7 @@ ssh root@dgx-spark.local
 - SSH keys: root login is key-based; drop your public key at
   `mkosi/mkosi.extra/root/.ssh/authorized_keys` before building (that path is
   gitignored, so keys never hit the repo).
-- Discovery: `ssh root@dgx-spark.local` (mDNS via avahi) or check DHCP leases.
+- Discovery: `ssh root@gx10-5e36.local` (mdnsd; `{sku}-{4-hex}` from DMI serial) or DHCP leases.
 - Serial fallback: 115200 8N1 on the debug port, root + password above.
 
 ## RAM philosophy
@@ -69,7 +88,7 @@ Every service is on trial. Default state:
 |---|---|
 | systemd (PID 1) | Debian semantics, unit management |
 | systemd-networkd + wpa_supplicant | connectivity |
-| sshd + avahi-daemon | remote access + discovery |
+| sshd + mdnsd | remote access + `{sku}-{4hex}.local` |
 | udevd | device management |
 
 Masked/absent: resolved (DNS via networkd), journald to disk, userdbd,

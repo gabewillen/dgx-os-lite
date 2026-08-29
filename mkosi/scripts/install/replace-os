@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Write XFS payload onto the OS partition and rewrite fstab.
+
+stage_replace_os() {
+  msg "stage: replace OS partition $OS_PART"
+  [[ -f "$PAYLOAD" ]] || die "payload missing: $PAYLOAD"
+
+  local os_bytes payload_bytes
+  os_bytes=$(blockdev --getsize64 "$OS_PART")
+  payload_bytes=$(stat -c %s "$PAYLOAD")
+
+  msg "writing ${payload_bytes} bytes onto $OS_PART (${os_bytes} bytes)"
+  run dd if="$PAYLOAD" of="$OS_PART" bs=16M conv=fsync,notrunc status=progress
+
+  local fstype
+  fstype=$(blkid -o value -s TYPE "$OS_PART" 2>/dev/null || echo xfs)
+  mkdir -p /mnt/dgx-lite-new
+  if [[ "$fstype" == xfs ]]; then
+    if [[ "$DRY_RUN" != 1 ]]; then
+      mount -o nouuid "$OS_PART" /mnt/dgx-lite-new
+      xfs_growfs /mnt/dgx-lite-new || true
+    fi
+  elif [[ "$fstype" == ext4 ]]; then
+    run e2fsck -fp "$OS_PART" || true
+    run resize2fs "$OS_PART" || true
+    [[ "$DRY_RUN" != 1 ]] && mount "$OS_PART" /mnt/dgx-lite-new
+  else
+    [[ "$DRY_RUN" != 1 ]] && mount "$OS_PART" /mnt/dgx-lite-new
+  fi
+}
+
+rewrite_fstab() {
+  local root_uuid esp_uuid
+  root_uuid=$(blkid -o value -s UUID "$OS_PART")
+  esp_uuid=$(blkid -o value -s UUID "$ESP_PART")
+  [[ -n "$root_uuid" ]] || die "no UUID on $OS_PART after write"
+  [[ -n "$esp_uuid" ]] || die "no UUID on $ESP_PART"
+
+  if [[ "$DRY_RUN" == 1 ]]; then
+    msg "DRY-RUN: would write fstab UUID=$root_uuid /  UUID=$esp_uuid /boot/efi"
+    return 0
+  fi
+
+  mkdir -p /mnt/dgx-lite-new/boot/efi /mnt/dgx-lite-new/etc
+  cat > /mnt/dgx-lite-new/etc/fstab <<EOF
+UUID=$root_uuid / xfs defaults,noatime 0 1
+UUID=$esp_uuid /boot/efi vfat umask=0077 0 2
+EOF
+}

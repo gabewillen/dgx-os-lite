@@ -64,8 +64,8 @@ GRUB_TERMINAL="serial console"
 GRUB_SERIAL_COMMAND="serial --unit=0 --speed=115200"
 EOF
 
-# mDNS hostname: ssh dgx@dgx-spark.local out of the box
-echo "dgx-spark" > /etc/hostname
+# Hostname is set at install time (factory-style {sku}-{serial4}, e.g. gx10-5e36).
+# Do not bake a shared name into the image.
 
 # First boot: ssh host keys generated here (never bake keys into image)
 mkdir -p /etc/systemd/system
@@ -83,5 +83,23 @@ ExecStart=/usr/bin/ssh-keygen -A
 WantedBy=multi-user.target
 EOF
 systemctl enable ssh-keygen-firstboot.service 2>/dev/null || true
+
+# mDNS: mdnsd (not avahi). Advertise {sku}-{4hex}.local via -H at install.
+mkdir -p /etc/systemd/system/mdnsd.service.d
+cat > /etc/systemd/system/mdnsd.service.d/override.conf <<'EOF'
+[Unit]
+After=systemd-networkd.service
+Wants=systemd-networkd.service
+# Debian unit Requires=network-online.target; we mask wait-online.
+Requires=
+
+[Service]
+ExecStart=
+ExecStart=/usr/sbin/mdnsd -sn -H localhost
+EOF
+systemctl enable mdnsd.service 2>/dev/null || true
+
+
+
 
 echo "dgx-spark-lite postinst complete" >&2

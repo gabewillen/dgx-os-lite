@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Add DGX-OS-Lite EFI files and BootXXXX entry. Do not delete NVIDIA files.
+
+stage_efi_entry() {
+  msg "stage: add DGX-OS-Lite EFI boot entry"
+  mkdir -p /mnt/dgx-lite-esp
+  if [[ "$DRY_RUN" != 1 ]]; then
+    mount "$ESP_PART" /mnt/dgx-lite-esp
+  fi
+
+  if [[ "$DRY_RUN" != 1 ]]; then
+    mkdir -p /mnt/dgx-lite-esp/EFI/dgx-os-lite
+    [[ -d "$ESP_STAGING" ]] || die "ESP staging tree missing: $ESP_STAGING"
+    cp -a "$ESP_STAGING/EFI/BOOT/BOOTAA64.EFI" /mnt/dgx-lite-esp/EFI/dgx-os-lite/grubaa64.efi
+    if [[ -d "$ESP_STAGING/grub" ]]; then
+      rm -rf /mnt/dgx-lite-esp/EFI/dgx-os-lite/grub
+      cp -a "$ESP_STAGING/grub" /mnt/dgx-lite-esp/EFI/dgx-os-lite/grub
+    fi
+    if [[ -d "$ESP_STAGING/debian" ]]; then
+      rm -rf /mnt/dgx-lite-esp/debian
+      cp -a "$ESP_STAGING/debian" /mnt/dgx-lite-esp/debian
+    fi
+    local partuuid
+    partuuid=$(blkid -o value -s PARTUUID "$OS_PART")
+    if [[ -f /mnt/dgx-lite-esp/EFI/dgx-os-lite/grub/grub.cfg ]]; then
+      sed -i "s/root=PARTUUID=[0-9a-fA-F-]*/root=PARTUUID=$partuuid/" \
+        /mnt/dgx-lite-esp/EFI/dgx-os-lite/grub/grub.cfg
+      printf 'configfile /EFI/dgx-os-lite/grub/grub.cfg\n' \
+        > /mnt/dgx-lite-esp/EFI/dgx-os-lite/grub.cfg
+    elif [[ -f "$ESP_STAGING/grub/grub.cfg" ]]; then
+      sed "s/root=PARTUUID=[0-9a-fA-F-]*/root=PARTUUID=$partuuid/" \
+        "$ESP_STAGING/grub/grub.cfg" > /mnt/dgx-lite-esp/EFI/dgx-os-lite/grub.cfg
+    fi
+  fi
+
+  local partnum
+  partnum="${ESP_PART##*p}"
+  [[ "$partnum" =~ ^[0-9]+$ ]] || die "cannot parse ESP partition number from $ESP_PART"
+
+  command -v efibootmgr >/dev/null || die "efibootmgr missing"
+  if efibootmgr -v 2>/dev/null | grep -qi 'DGX-OS-Lite'; then
+    msg "EFI entry DGX-OS-Lite already present"
+  else
+    run efibootmgr --create --disk "$DISK" --part "$partnum" \
+      --label 'DGX-OS-Lite' \
+      --loader '\EFI\dgx-os-lite\grubaa64.efi'
+  fi
+}

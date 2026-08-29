@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Set BootNext to DGX-OS-Lite and reboot.
+
+stage_bootnext() {
+  msg "stage: set BootNext to DGX-OS-Lite"
+  local bootnum
+  bootnum=$(efibootmgr -v 2>/dev/null | awk 'BEGIN{IGNORECASE=1} /DGX-OS-Lite/{print $1; exit}' | tr -dc '0-9A-Fa-f')
+  [[ -n "$bootnum" ]] || die "could not find DGX-OS-Lite in efibootmgr"
+  run efibootmgr --bootnext "0x$bootnum"
+  msg "BootNext=0x$bootnum"
+  : > "$MARKER"
+}
+
+stage_reboot() {
+  if [[ "$REBOOT_AFTER" != 1 ]]; then
+    msg "DGX_LITE_REBOOT!=1 — not rebooting"
+    return 0
+  fi
+  msg "rebooting into installed OS"
+  if [[ "$DRY_RUN" == 1 ]]; then
+    msg "DRY-RUN: would reboot"
+    return 0
+  fi
+  umount /mnt/dgx-lite-new 2>/dev/null || true
+  umount /mnt/dgx-lite-esp 2>/dev/null || true
+  sync
+  systemctl reboot
+}

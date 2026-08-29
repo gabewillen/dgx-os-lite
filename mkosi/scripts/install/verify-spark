@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Verify this machine is a DGX Spark / GB10 / ASUS GX10.
+
+stage_verify_spark() {
+  msg "stage: verify DGX Spark"
+  local vendor product board sys
+  vendor=$(dmi sys_vendor)
+  product=$(dmi product_name)
+  board=$(dmi board_name)
+  sys="${vendor} ${product} ${board}"
+  msg "DMI: vendor='$vendor' product='$product' board='$board'"
+
+  if [[ "${ALLOW_NONSPARK:-0}" == 1 ]]; then
+    msg "DGX_LITE_ALLOW_NONSPARK=1 — skipping hardware gate"
+    return 0
+  fi
+
+  echo "$sys" | grep -qiE 'NVIDIA.*(DGX Spark|GB10)|DGX Spark|ASUS.*(GX10|Ascent GX10)|Ascent GX10' \
+    || die "not a DGX Spark / GB10 system (DMI='$sys'). Refusing to touch disks."
+
+  uname -m | grep -qx aarch64 || die "expected aarch64, got $(uname -m)"
+  msg "Spark/GB10 identity OK"
+}
