@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Confirm target systemd, fstab, and EFI loader exist.
+# Confirm target finit, fstab, and EFI loader exist.
 
 stage_verify_install() {
   msg "stage: verify installation"
   [[ "$DRY_RUN" == 1 ]] && { msg "DRY-RUN: skip mount verification"; return 0; }
 
   findmnt /mnt/dgx-lite-new >/dev/null || mount -o nouuid "$OS_PART" /mnt/dgx-lite-new
-  [[ -x /mnt/dgx-lite-new/usr/lib/systemd/systemd ]] || die "target has no systemd"
+  [[ -x /mnt/dgx-lite-new/usr/sbin/finit ]] || die "target has no finit"
+  [[ -e /mnt/dgx-lite-new/sbin/init ]] || die "target has no /sbin/init"
   [[ -f /mnt/dgx-lite-new/etc/fstab ]] || die "target has no fstab"
   grep -q '^UUID=' /mnt/dgx-lite-new/etc/fstab || die "fstab missing UUID entries"
   [[ -f /mnt/dgx-lite-esp/EFI/dgx-os-lite/grubaa64.efi ]] || die "EFI loader not installed"
-  msg "target systemd + fstab + EFI loader OK"
+  msg "target finit + fstab + EFI loader OK"
 }

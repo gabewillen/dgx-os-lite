@@ -27,22 +27,15 @@ apply_hostname() {
   if [[ "$DRY_RUN" == 1 ]]; then
     return 0
   fi
-  mkdir -p /mnt/dgx-lite-new/etc \
-           /mnt/dgx-lite-new/etc/systemd/system/mdnsd.service.d
+  mkdir -p /mnt/dgx-lite-new/etc /mnt/dgx-lite-new/etc/finit.d/available
   printf '%s\n' "$hn" > /mnt/dgx-lite-new/etc/hostname
   cat > /mnt/dgx-lite-new/etc/hosts <<EOF
 127.0.0.1 localhost
 127.0.1.1 $hn
 ::1 localhost ip6-localhost ip6-loopback
 EOF
-  cat > /mnt/dgx-lite-new/etc/systemd/system/mdnsd.service.d/override.conf <<EOF
-[Unit]
-After=systemd-networkd.service
-Wants=systemd-networkd.service
-Requires=
-
-[Service]
-ExecStart=
-ExecStart=/usr/sbin/mdnsd -sn -H $hn
+  cat > /mnt/dgx-lite-new/etc/finit.d/available/mdnsd.conf <<EOF
+service [2345] <net/lo/up> /usr/sbin/mdnsd -sn -H $hn -- mDNS
 EOF
+  ln -sfn /etc/finit.d/available/mdnsd.conf /mnt/dgx-lite-new/etc/finit.d/mdnsd.conf
 }

@@ -86,15 +86,15 @@ Every service is on trial. Default state:
 
 | running | why |
 |---|---|
-| systemd (PID 1) | Debian semantics, unit management |
-| systemd-networkd + wpa_supplicant | connectivity |
+| finit (PID 1) | Debian finit-sysv; udev kept from systemd package |
+| dhcpcd + wpa_supplicant | connectivity |
 | sshd + mdnsd | remote access + `{sku}-{4hex}.local` |
-| udevd | device management |
+| systemd-udevd | device management |
 
-Masked/absent: resolved (DNS via networkd), journald to disk, userdbd,
-homed, portabled, daily apt timers, e2scrub, fstrim, ModemManager, polkit,
-udisks2, cups, NetworkManager. Result target: **well under 512 MiB RSS**
-before any inference engine is loaded (see `docs/memory-accounting.md`).
+No systemd as PID 1 (finit-sysv). No journald, networkd, resolved, userdbd,
+homed. Result target: **well under 512 MiB RSS** before inference
+(see `docs/memory-accounting.md`).
+
 
 ## Extending (inference engine)
 
