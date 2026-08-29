@@ -17,6 +17,27 @@ GRUB_TERMINAL="serial console"
 GRUB_SERIAL_COMMAND="serial --unit=0 --speed=115200"
 EOF
 
+mkdir -p /etc/network/interfaces.d
+cat > /etc/network/interfaces <<'EOF'
+# Standard ifupdown. DHCP on ethernet / ConnectX; WiFi via wpa if configured.
+source /etc/network/interfaces.d/*
+
+auto lo
+iface lo inet loopback
+
+allow-hotplug eth0
+iface eth0 inet dhcp
+
+allow-hotplug enp0s18
+iface enp0s18 inet dhcp
+
+allow-hotplug enp0s1
+iface enp0s1 inet dhcp
+
+allow-hotplug mlx0
+iface mlx0 inet dhcp
+EOF
+
 mkdir -p /etc/finit.d /etc/finit.d/available
 
 cat > /etc/finit.conf <<'EOF'
@@ -28,8 +49,8 @@ tty [12345] /dev/ttyAMA0 vt100 noclear nowait
 tty [12345] /dev/tty1 linux noclear nowait
 EOF
 
-cat > /etc/finit.d/available/dhcpcd.conf <<'EOF'
-service [2345] <service/udevd/ready> /usr/sbin/dhcpcd -B -- DHCP
+cat > /etc/finit.d/available/networking.conf <<'EOF'
+run [S] <service/udevd/ready> /sbin/ifup -a -- ifup
 EOF
 
 cat > /etc/finit.d/available/sshd.conf <<'EOF'
@@ -45,9 +66,9 @@ cat > /etc/finit.d/available/nvidia-persistenced.conf <<'EOF'
 service nowarn [2345] <service/udevd/ready> /usr/bin/nvidia-persistenced --persistence-mode -- NVIDIA persistenced
 EOF
 
-ln -sfn /etc/finit.d/available/dhcpcd.conf /etc/finit.d/dhcpcd.conf
+ln -sfn /etc/finit.d/available/networking.conf /etc/finit.d/networking.conf
 ln -sfn /etc/finit.d/available/sshd.conf /etc/finit.d/sshd.conf
 ln -sfn /etc/finit.d/available/mdnsd.conf /etc/finit.d/mdnsd.conf
 ln -sfn /etc/finit.d/available/nvidia-persistenced.conf /etc/finit.d/nvidia-persistenced.conf
 
-echo "dgx-spark-lite postinst complete (finit)" >&2
+echo "dgx-spark-lite postinst complete (finit + ifupdown)" >&2

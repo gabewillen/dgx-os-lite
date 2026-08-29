@@ -87,7 +87,7 @@ Every service is on trial. Default state:
 | running | why |
 |---|---|
 | finit (PID 1) | finit-sysv; udev + systemd-standalone-sysusers (no systemd daemon) |
-| dhcpcd + wpa_supplicant | connectivity |
+| ifupdown + /etc/network/interfaces | DHCP on eth/enp/mlx |
 | sshd + mdnsd | remote access + `{sku}-{4hex}.local` |
 | systemd-udevd | device management |
 
