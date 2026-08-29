@@ -22,7 +22,7 @@ jobs:
           # Ubuntu Noble ships mkosi 20.2, whose Debian initrd profile still
           # requests obsolete pre-t64 libtss2-mu0. Overlay it with the current
           # upstream release; PyPI does not publish mkosi distributions.
-          sudo apt-get install -y python3-pip qemu-user-static sbsigntool systemd-ukify systemd-boot
+          sudo apt-get install -y debian-archive-keyring python3-pip qemu-user-static sbsigntool systemd-ukify systemd-boot
           sudo python3 -m pip install --break-system-packages --no-build-isolation --upgrade \
             'https://github.com/systemd/mkosi/archive/refs/tags/v25.3.tar.gz'
 
