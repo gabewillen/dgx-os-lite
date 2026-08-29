@@ -19,9 +19,11 @@ jobs:
 
       - name: Install mkosi
         run: |
-          # bootctl identifies kernel type during mkosi's cross-arch build.
-          # Ubuntu packages bootctl in systemd-boot, not systemd-boot-tools.
-          sudo apt-get install -y mkosi qemu-user-static sbsigntool systemd-ukify systemd-boot
+          # Ubuntu Noble ships mkosi 20.2, whose Debian initrd profile still
+          # requests obsolete pre-t64 libtss2-mu0. Install the current mkosi
+          # release from PyPI; keep bootctl and image tooling from apt.
+          sudo apt-get install -y python3-pip qemu-user-static sbsigntool systemd-ukify systemd-boot
+          sudo python3 -m pip install --break-system-packages --upgrade 'mkosi==25.3'
 
       - name: Build image
         run: |
